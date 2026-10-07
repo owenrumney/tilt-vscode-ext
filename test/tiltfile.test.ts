@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { test } from "node:test";
-import { describeTiltfiles, downArgs, upArgs } from "../src/tiltfile";
+import {
+  describeTiltfiles,
+  downArgs,
+  tiltfilePathFromEngineDump,
+  upArgs,
+} from "../src/tiltfile";
 
 const ROOT = path.join(path.sep, "repo");
 const p = (...parts: string[]) => path.join(ROOT, ...parts);
@@ -59,4 +64,18 @@ test("upArgs only passes a port when it is not the default", () => {
 
 test("downArgs takes no port", () => {
   assert.deepEqual(downArgs(), ["down"]);
+});
+
+test("tiltfilePathFromEngineDump reads the running Tiltfile", () => {
+  const dump = {
+    TiltBuildInfo: { Version: "0.37.8" },
+    DesiredTiltfilePath: "/repo/demo/Tiltfile",
+  };
+  assert.equal(tiltfilePathFromEngineDump(dump), "/repo/demo/Tiltfile");
+});
+
+test("tiltfilePathFromEngineDump rejects anything unusable", () => {
+  for (const dump of [undefined, null, "", 42, {}, { DesiredTiltfilePath: "" }, { DesiredTiltfilePath: "  " }, { DesiredTiltfilePath: 7 }]) {
+    assert.equal(tiltfilePathFromEngineDump(dump), undefined, JSON.stringify(dump));
+  }
 });

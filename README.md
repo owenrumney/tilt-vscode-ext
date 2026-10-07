@@ -89,7 +89,9 @@ its resources are healthy. Without labels the list stays flat.
 | `Tilt: Show Tilt Logs` | The Tilt-level log, not a resource log. Same panel. |
 | `Tilt: Expand All Groups` / `Tilt: Collapse All Groups` | Title-bar buttons on the view. |
 | `Tilt: Filter by Status` | Pick any set of statuses. The button fills in while a filter is on; click it to clear. |
-| `Tilt: Up` / `Tilt: Down` | Run tilt in a terminal. Several Tiltfiles in the workspace means it asks which. |
+| `Tilt: Up` | Run `tilt up` in its own terminal. Several Tiltfiles in the workspace means it asks which. |
+| `Tilt: Stop` | Ctrl-C the `tilt up` this extension started. Tilt has no API for stopping, so a session started elsewhere has to be stopped where it runs. |
+| `Tilt: Down` | `tilt down`, which **deletes the resources the Tiltfile deployed**. It does not stop a running `tilt up`. Asks first. |
 
 ## Settings
 

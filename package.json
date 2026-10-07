@@ -139,11 +139,6 @@
       },
       {
         "view": "tilt.resources",
-        "when": "tilt.state != connecting && tilt.state != connected && tilt.hasTiltfile",
-        "contents": "Not connected to Tilt.\n\n[Tilt Up](command:tilt.up)\n\nAlready running it elsewhere?\n[Connect](command:tilt.connect)"
-      },
-      {
-        "view": "tilt.resources",
         "when": "tilt.state != connecting && tilt.state != connected && !tilt.hasTiltfile",
         "contents": "Not connected to Tilt.\n\nNo Tiltfile in the open folders. Start Tilt with `tilt up`, then connect.\n[Connect](command:tilt.connect)"
       }
@@ -155,9 +150,14 @@
         "icon": "$(debug-start)"
       },
       {
-        "command": "tilt.down",
-        "title": "Tilt: Down",
+        "command": "tilt.stop",
+        "title": "Tilt: Stop",
         "icon": "$(debug-stop)"
+      },
+      {
+        "command": "tilt.down",
+        "title": "Tilt: Down (delete deployed resources)",
+        "icon": "$(trash)"
       },
       {
         "command": "tilt.connect",
@@ -226,9 +226,14 @@
           "group": "navigation@-2"
         },
         {
-          "command": "tilt.down",
+          "command": "tilt.stop",
           "when": "view == tilt.resources && tilt.hasTiltfile",
           "group": "navigation@-1"
+        },
+        {
+          "command": "tilt.down",
+          "when": "view == tilt.resources && tilt.hasTiltfile",
+          "group": "2_open"
         },
         {
           "command": "tilt.filterStatus",
@@ -243,22 +248,22 @@
         {
           "command": "tilt.expandAll",
           "when": "view == tilt.resources",
-          "group": "navigation@1"
+          "group": "1_view"
         },
         {
           "command": "tilt.collapseAll",
           "when": "view == tilt.resources",
-          "group": "navigation@2"
+          "group": "1_view"
         },
         {
           "command": "tilt.reconnect",
           "when": "view == tilt.resources",
-          "group": "navigation@3"
+          "group": "navigation@1"
         },
         {
           "command": "tilt.openInBrowser",
           "when": "view == tilt.resources",
-          "group": "navigation@4"
+          "group": "2_open"
         }
       ],
       "view/item/context": [

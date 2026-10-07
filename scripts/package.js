@@ -323,5 +323,7 @@ async function verifyMarketplace() {
     }
     process.exit(1);
   }
-  console.log(`\nDone: ${path.basename(vsix)}`);
+  console.log(
+    `\nDone: ${version} published for ${targets.map((t) => t.vsce).join(", ")}`,
+  );
 })();

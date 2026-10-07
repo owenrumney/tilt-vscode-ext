@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { TiltClient } from "./client";
 import { CONNECTION_KEYS, TiltConfig, baseUrl, readConfig } from "./config";
 import { findTiltfiles, tiltDown, tiltUp } from "./cli";
-import { warnOnGrammarConflict } from "./conflict";
+import { warnOnConflicts } from "./conflict";
 import { LogStore, TILT_KEY } from "./logstore";
 import { startLanguageServer } from "./lsp";
 import { ViewModel } from "./model";
@@ -135,7 +135,7 @@ export function activate(context: vscode.ExtensionContext): void {
     log: true,
   });
   const languageClient = startLanguageServer(context, log);
-  void warnOnGrammarConflict(context, log);
+  void warnOnConflicts(context, log);
 
   // The up and down buttons only exist when there is something to run.
   const refreshTiltfiles = async () => {
@@ -163,7 +163,7 @@ export function activate(context: vscode.ExtensionContext): void {
     ...(languageClient ? [{ dispose: () => void languageClient.stop() }] : []),
     vscode.workspace.onDidChangeWorkspaceFolders(refreshTiltfiles),
     vscode.commands.registerCommand("tilt.up", () => tiltUp(readConfig())),
-    vscode.commands.registerCommand("tilt.down", () => tiltDown()),
+    vscode.commands.registerCommand("tilt.down", () => tiltDown(readConfig())),
     vscode.commands.registerCommand("tilt.filterStatus", applyStatusFilter),
     vscode.commands.registerCommand("tilt.clearStatusFilter", () => {
       tree.setStatusFilter([]);

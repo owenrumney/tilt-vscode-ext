@@ -24,6 +24,14 @@ jobs:
       - name: Package (exercises the release script's build path)
         run: node scripts/package.js build
 
+      # With no tokens in the environment both publishes skip and the
+      # verification poll returns immediately, so this runs in milliseconds and
+      # still executes the publish path end to end. A stale variable in that
+      # path otherwise only surfaces during a release, after the artifacts have
+      # already gone to both registries.
+      - name: Publish path (no tokens, so nothing is published)
+        run: node scripts/package.js publish
+
   language-server:
     runs-on: ubuntu-latest
     timeout-minutes: 15

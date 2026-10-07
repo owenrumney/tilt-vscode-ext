@@ -1,14 +1,19 @@
 import * as vscode from "vscode";
-import { TiltConfig } from "./config";
+import { TiltConfig, baseUrl, outboundToken } from "./config";
 import {
   TiltfileEntry,
   describeTiltfiles,
   downArgs,
+  tiltfilePathFromEngineDump,
   upArgs,
 } from "./tiltfile";
 
 const EXCLUDE = "**/{node_modules,.git,dist,out}/**";
-const TERMINAL_NAME = "Tilt";
+// "tilt up" never exits, so it owns its terminal. Sending "tilt down" to the
+// same one types into the running process stdin instead of a shell, which is
+// why reusing a single terminal made the down button do nothing.
+const UP_TERMINAL = "tilt up";
+const DOWN_TERMINAL = "tilt down";
 
 /** Every Tiltfile in the open folders, the root one first. */
 export async function findTiltfiles(): Promise<TiltfileEntry[]> {
@@ -73,14 +78,23 @@ export async function tiltUp(config: TiltConfig): Promise<void> {
       return;
     }
   }
-  run(entry, upArgs(config.port));
+  run(UP_TERMINAL, entry, upArgs(config.port));
 }
 
-export async function tiltDown(): Promise<void> {
+export async function tiltDown(config: TiltConfig): Promise<void> {
+  // Ask the running Tilt which Tiltfile it was started with, so the button
+  // stops the session that is actually up — including one started outside the
+  // editor. Only fall back to guessing when nothing answers.
+  const running = await runningTiltfile(config);
+  if (running) {
+    run(DOWN_TERMINAL, entryForPath(running), downArgs());
+    return;
+  }
+
   const entries = await findTiltfiles();
   if (entries.length === 0) {
     vscode.window.showWarningMessage(
-      "Tilt: no Tiltfile found in the open folders.",
+      "Tilt: no Tiltfile found in the open folders, and no running Tilt to ask.",
     );
     return;
   }
@@ -88,20 +102,45 @@ export async function tiltDown(): Promise<void> {
   if (!entry) {
     return;
   }
-  run(entry, downArgs());
+  run(DOWN_TERMINAL, entry, downArgs());
+}
+
+/** The absolute Tiltfile path a running Tilt reports, if one is reachable. */
+async function runningTiltfile(config: TiltConfig): Promise<string | undefined> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2000);
+  try {
+    const res = await fetch(`${baseUrl(config)}/api/dump/engine`, {
+      headers: { "X-Tilt-Token": outboundToken(config) },
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      return undefined;
+    }
+    return tiltfilePathFromEngineDump(await res.json());
+  } catch {
+    // Not running, not reachable, or not answering in time.
+    return undefined;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function entryForPath(file: string): TiltfileEntry {
+  const roots = (vscode.workspace.workspaceFolders ?? []).map(
+    (f) => f.uri.fsPath,
+  );
+  return describeTiltfiles([file], roots)[0];
 }
 
 /**
  * Runs tilt in a terminal rather than a task: `tilt up` does not exit, prints
  * its own progress, and needs Ctrl-C to stop. A task would hide all three.
  */
-function run(entry: TiltfileEntry, args: string[]): void {
-  const existing = vscode.window.terminals.find(
-    (t) => t.name === TERMINAL_NAME,
-  );
+function run(name: string, entry: TiltfileEntry, args: string[]): void {
+  const existing = vscode.window.terminals.find((t) => t.name === name);
   const terminal =
-    existing ??
-    vscode.window.createTerminal({ name: TERMINAL_NAME, cwd: entry.dir });
+    existing ?? vscode.window.createTerminal({ name, cwd: entry.dir });
   terminal.show();
   terminal.sendText(`cd ${quote(entry.dir)} && tilt ${args.join(" ")}`);
 }

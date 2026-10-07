@@ -53,3 +53,18 @@ function entry(file: string, roots: string[]): TiltfileEntry {
 function depth(label: string): number {
   return label.split(path.sep).length;
 }
+
+/**
+ * The Tiltfile a running Tilt was started with, from its engine dump.
+ *
+ * Tilt reports an absolute path in `DesiredTiltfilePath`, which is how the
+ * down button can target the session that is actually running rather than
+ * asking again — including a session someone started outside the editor.
+ */
+export function tiltfilePathFromEngineDump(dump: unknown): string | undefined {
+  if (!dump || typeof dump !== "object") {
+    return undefined;
+  }
+  const path = (dump as { DesiredTiltfilePath?: unknown }).DesiredTiltfilePath;
+  return typeof path === "string" && path.trim() ? path : undefined;
+}
