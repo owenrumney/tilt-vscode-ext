@@ -12,3 +12,5 @@ tsconfig*.json
 demo/**
 *.vsix
 scripts/**
+resources/tilt.gif
+resources/icon.svg

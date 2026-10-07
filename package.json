@@ -15,6 +15,7 @@
   "categories": [
     "Other"
   ],
+  "icon": "resources/icon.png",
   "keywords": [
     "tilt",
     "kubernetes",
