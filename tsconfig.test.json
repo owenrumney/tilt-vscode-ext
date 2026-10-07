@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "out"
+  },
+  "include": [
+    "test",
+    "src/model.ts",
+    "src/status.ts",
+    "src/token.ts",
+    "src/types.ts"
+  ]
+}

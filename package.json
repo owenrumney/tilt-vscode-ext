@@ -1,0 +1,177 @@
+{
+  "name": "tilt-viewer",
+  "displayName": "Tilt Viewer",
+  "description": "View Tilt resources, stream their logs, and trigger updates from VS Code",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "publisher": "owenrumney",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/owenrumney/tilt-viewer.git"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "tilt",
+    "kubernetes",
+    "docker-compose"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "configuration": {
+      "title": "Tilt Viewer",
+      "properties": {
+        "tilt.host": {
+          "type": "string",
+          "default": "localhost",
+          "description": "Host of the Tilt web UI."
+        },
+        "tilt.port": {
+          "type": "number",
+          "default": 10350,
+          "description": "Port of the Tilt web UI."
+        },
+        "tilt.token": {
+          "type": "string",
+          "default": "",
+          "description": "Tilt session token. Leave empty to read it from ~/.tilt-dev/token."
+        },
+        "tilt.autoConnect": {
+          "type": "boolean",
+          "default": true,
+          "description": "Connect to Tilt when VS Code starts."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "tilt",
+          "title": "Tilt",
+          "icon": "resources/tilt.svg"
+        }
+      ]
+    },
+    "views": {
+      "tilt": [
+        {
+          "id": "tilt.resources",
+          "name": "Resources"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "tilt.resources",
+        "contents": "Not connected to Tilt.\n\nStart Tilt with `tilt up`, then connect.\n[Connect](command:tilt.connect)"
+      }
+    ],
+    "commands": [
+      {
+        "command": "tilt.connect",
+        "title": "Tilt: Connect",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "tilt.disconnect",
+        "title": "Tilt: Disconnect"
+      },
+      {
+        "command": "tilt.reconnect",
+        "title": "Tilt: Reconnect",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "tilt.showLogs",
+        "title": "Show Logs",
+        "icon": "$(output)"
+      },
+      {
+        "command": "tilt.showTiltLogs",
+        "title": "Tilt: Show Tilt Logs"
+      },
+      {
+        "command": "tilt.trigger",
+        "title": "Trigger Update",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "tilt.openInBrowser",
+        "title": "Open in Tilt UI",
+        "icon": "$(link-external)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "tilt.reconnect",
+          "when": "view == tilt.resources",
+          "group": "navigation@1"
+        },
+        {
+          "command": "tilt.openInBrowser",
+          "when": "view == tilt.resources",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "tilt.trigger",
+          "when": "view == tilt.resources && viewItem == tiltResource",
+          "group": "inline@1"
+        },
+        {
+          "command": "tilt.showLogs",
+          "when": "view == tilt.resources && viewItem == tiltResource",
+          "group": "inline@2"
+        },
+        {
+          "command": "tilt.trigger",
+          "when": "view == tilt.resources && viewItem == tiltResource",
+          "group": "1_run@1"
+        },
+        {
+          "command": "tilt.showLogs",
+          "when": "view == tilt.resources && viewItem == tiltResource",
+          "group": "1_run@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "tilt.trigger",
+          "when": "false"
+        },
+        {
+          "command": "tilt.showLogs",
+          "when": "false"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "package": "node esbuild.js --production",
+    "typecheck": "tsc --noEmit",
+    "pretest": "tsc -p tsconfig.test.json",
+    "test": "node --test out/test/*.test.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.85.0",
+    "@types/ws": "^8.5.12",
+    "@vscode/vsce": "^3.2.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0"
+  }
+}
