@@ -23,3 +23,6 @@ and underline, which is the quickest way to check the ANSI rendering in the log 
 build run from the tree.
 
 `broken` fails on purpose, so one resource is always red.
+
+For pod names, pod statuses and restart counts, which no local resource can show, use
+[`../demo-k8s`](../demo-k8s) instead. It needs a local cluster.

@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import WebSocket from "ws";
-import { TiltConfig, baseUrl, wsUrl } from "./config";
+import { TiltConfig, baseUrl, outboundToken, wsUrl } from "./config";
 import { View } from "./types";
 
 const TOKEN_HEADER = "X-Tilt-Token";
@@ -95,7 +95,7 @@ export class TiltClient implements vscode.Disposable {
     }
 
     const socket = new WebSocket(wsUrl(this.config, csrf), {
-      headers: { [TOKEN_HEADER]: this.config.token },
+      headers: { [TOKEN_HEADER]: outboundToken(this.config) },
     });
     this.socket = socket;
 
@@ -146,7 +146,7 @@ export class TiltClient implements vscode.Disposable {
       signal,
       headers: {
         ...(init.headers ?? {}),
-        [TOKEN_HEADER]: this.config.token,
+        [TOKEN_HEADER]: outboundToken(this.config),
         "Content-Type": "application/json",
       },
     });

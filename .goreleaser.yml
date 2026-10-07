@@ -1,0 +1,75 @@
+# Releases the Tiltfile language server as standalone binaries, and attaches
+# the platform .vsix files built by scripts/package.js to the same release.
+#
+# The binaries exist so a bug report can name a version, and so an editor
+# other than VS Code can use the server. The extension bundles its own copy;
+# nothing in the extension downloads from here.
+version: 2
+
+project_name: tiltfile-lsp
+
+# Not "dist": that is the esbuild bundle for the extension, and goreleaser
+# --clean would delete it.
+dist: dist-release
+
+before:
+  # Hooks take a plain command, so the directory change lives in the Makefile
+  # target rather than being repeated here. No "go mod tidy": a release should
+  # not be the thing that edits go.mod.
+  hooks:
+    - make lsp-test
+
+builds:
+  # The Go module is nested, because the VS Code extension owns the repository
+  # root.
+  - dir: lsp
+    main: ./cmd/tiltfile-lsp
+    binary: tiltfile-lsp
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      # Matches what the binary prints for --version and what the server
+      # reports in its initialize result.
+      - -s -w -X main.version={{ .Version }}
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      # No evidence anyone needs it, and it is one more artifact to sign.
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - src: LICENSE
+      - src: README.md
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+
+release:
+  # The .vsix files are built before goreleaser runs, so they ride along on the
+  # same GitHub release rather than needing a second upload step.
+  extra_files:
+    - glob: ./*.vsix

@@ -1,0 +1,33 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - 'printf "applying 3 migrations\n"; sleep 3; printf "\033[32mok\033[0m schema at revision 0003\n"'
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: seed-data
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: seed
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - 'printf "seeding\n"; sleep 3; printf "\033[32mok\033[0m 1200 rows\n"'

@@ -1,0 +1,136 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: site-content
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+    <meta charset="UTF-8">
+    <title>Tilt Tools demo</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 4rem auto; max-width: 32rem; }
+      code { background: #eee; padding: 0 .25rem; }
+    </style>
+    </head>
+    <body>
+    <h1>Tilt Tools demo</h1>
+    <p>Served from a pod in the local cluster by the demo <code>Tiltfile</code>. It exists
+    so the link button in the VS Code extension has somewhere to go.</p>
+    </body>
+    </html>
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-nginx-conf
+data:
+  default.conf: |
+    server {
+      listen 80;
+      root /usr/share/nginx/html;
+      location = /health { default_type text/plain; return 200 "ok\n"; }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels: { app: web }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: web }
+  template:
+    metadata:
+      labels: { app: web }
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports: [{ containerPort: 80 }]
+          volumeMounts:
+            - { name: content, mountPath: /usr/share/nginx/html }
+          readinessProbe:
+            httpGet: { path: /, port: 80 }
+      volumes:
+        - name: content
+          configMap: { name: site-content }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+spec:
+  selector: { app: web }
+  ports: [{ port: 80, targetPort: 80 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docs
+  labels: { app: docs }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: docs }
+  template:
+    metadata:
+      labels: { app: docs }
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports: [{ containerPort: 80 }]
+          volumeMounts:
+            - { name: content, mountPath: /usr/share/nginx/html }
+          readinessProbe:
+            httpGet: { path: /, port: 80 }
+      volumes:
+        - name: content
+          configMap: { name: site-content }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: docs
+spec:
+  selector: { app: docs }
+  ports: [{ port: 80, targetPort: 80 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  labels: { app: api }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: api }
+  template:
+    metadata:
+      labels: { app: api }
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports: [{ containerPort: 80 }]
+          volumeMounts:
+            - { name: content, mountPath: /usr/share/nginx/html }
+            - { name: conf, mountPath: /etc/nginx/conf.d }
+          readinessProbe:
+            httpGet: { path: /health, port: 80 }
+      volumes:
+        - name: content
+          configMap: { name: site-content }
+        - name: conf
+          configMap: { name: api-nginx-conf }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+spec:
+  selector: { app: api }
+  ports: [{ port: 80, targetPort: 80 }]

@@ -13,36 +13,51 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
           cache: npm
 
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: lsp/go.mod
+          cache-dependency-path: lsp/go.sum
+
       - run: npm ci
 
+      # The Go tests are not repeated here: goreleaser's before-hook runs
+      # make lsp-test.
       - name: Typecheck and test
         run: |
           npm run typecheck
           npm run pretest
           npm test
 
-      - name: Build the vsix
+      # The package script cross-compiles the language server for each target
+      # and packages one .vsix per platform.
+      - name: Build the platform vsix files
         run: node scripts/package.js build
 
+      # The build stamps the tag version into package.json, and goreleaser
+      # refuses to run on a dirty tree, so this has to come first.
       - name: Restore git state after the vsix build
         if: always()
         run: git checkout -- package.json
 
       # The registries cannot be un-published, so the release is created first.
-      - name: Attach the vsix to the release
-        uses: softprops/action-gh-release@v2
+      # goreleaser owns it: standalone language server binaries, checksums and
+      # a changelog, with the .vsix files attached via release.extra_files.
+      - name: Release
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
         with:
-          files: "*.vsix"
-          generate_release_notes: true
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish to the registries
         env:

@@ -1,0 +1,37 @@
+# A cluster demo stack, for the parts of the extension that only Kubernetes
+# resources exercise: pod names, pod statuses and restart counts.
+#
+# Every workload runs a public image with its content mounted from a ConfigMap,
+# so there is no registry and no image build. For label groups, manual triggers,
+# failures and coloured log output, use ../demo instead — it needs no cluster.
+#
+#   cd demo-k8s && tilt up
+
+# Any local cluster will do. Tilt refuses to deploy to a context it does not
+# recognise as local, and it does not yet know OrbStack by name.
+allow_k8s_contexts(['orbstack', 'orbstack-k8s'])
+
+k8s_yaml(['k8s/sites.yaml', 'k8s/jobs.yaml', 'k8s/flaky.yaml'])
+
+# Ports are offset from ../demo, so both stacks can run side by side.
+
+# 1-frontend — two served sites, each reachable through a port forward.
+k8s_resource('web', port_forwards='3110:80', labels=['1-frontend'])
+k8s_resource('docs', port_forwards='3111:80', labels=['1-frontend'])
+
+# 2-services — the api carries two links, so the link button has to ask which.
+# Two replicas, so the tree has a resource with more than one pod behind it.
+k8s_resource(
+    'api',
+    port_forwards='3120:80',
+    links=[link('http://localhost:3120/health', 'health')],
+    labels=['2-services'],
+)
+
+# 3-infra — two Jobs, the second waiting on the first. A finished Job reads as
+# green without a running pod, which is a different state from a Deployment.
+k8s_resource('db-migrate', labels=['3-infra'])
+k8s_resource('seed-data', resource_deps=['db-migrate'], labels=['3-infra'])
+
+# A pod that keeps dying, so the restart count in the tree is non-zero.
+k8s_resource('flaky', labels=['3-infra'])

@@ -4,12 +4,19 @@ import { ViewModel } from "./model";
 import {
   ALL_STATUSES,
   ResourceStatus,
+  buildSummary,
+  conditionDetail,
   filterByStatus,
+  hasLiveUpdate,
+  podMessage,
+  podObjects,
   resourceLinks,
   resourceStatus,
+  resourceType,
   statusColor,
   statusIcon,
   statusLabel,
+  waitingLabel,
   worstStatus,
 } from "./status";
 import { UIResource } from "./types";
@@ -134,17 +141,43 @@ function icon(status: ResourceStatus): vscode.ThemeIcon {
 
 function tooltip(r: UIResource): vscode.MarkdownString {
   const s = r.status ?? {};
+  const type = resourceType(r);
   const lines = [
     `**${r.metadata?.name ?? "(unnamed)"}**`,
     "",
     `- update: \`${s.updateStatus ?? "none"}\``,
     `- runtime: \`${s.runtimeStatus ?? "none"}\``,
   ];
+  if (type) {
+    lines.push(
+      `- type: \`${type}\`${hasLiveUpdate(r) ? " (live update)" : ""}`,
+    );
+  }
+  const build = buildSummary(r);
+  if (build) {
+    lines.push(`- last build: ${build}`);
+  }
+  const waiting = waitingLabel(r);
+  if (waiting) {
+    lines.push(`- ${waiting}`);
+  }
   if (s.k8sResourceInfo?.podName) {
     lines.push(`- pod: \`${s.k8sResourceInfo.podName}\``);
   }
   if (s.k8sResourceInfo?.podRestarts) {
     lines.push(`- restarts: ${s.k8sResourceInfo.podRestarts}`);
+  }
+  const message = podMessage(r);
+  if (message) {
+    lines.push(`- ${truncate(message, 120)}`);
+  }
+  const notReady = conditionDetail(r, "Ready");
+  if (notReady) {
+    lines.push(`- not ready: ${truncate(notReady, 120)}`);
+  }
+  const objects = podObjects(r);
+  if (objects.length) {
+    lines.push(`- objects: ${objects.join(", ")}`);
   }
   for (const link of s.endpointLinks ?? []) {
     if (link.url) {
@@ -154,4 +187,9 @@ function tooltip(r: UIResource): vscode.MarkdownString {
   const md = new vscode.MarkdownString(lines.join("\n"));
   md.isTrusted = false;
   return md;
+}
+
+// Pod messages carry the full pod id, which overflows a tooltip line.
+function truncate(text: string, max: number): string {
+  return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
 }

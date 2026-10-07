@@ -5,11 +5,20 @@ import {
   ResourceStatus,
   compareResources,
   filterByStatus,
+  hasLiveUpdate,
   resourceLinks,
   resourceStatus,
+  resourceType,
   statusColor,
   statusIcon,
   statusLabel,
+  buildSummary,
+  conditionDetail,
+  lastBuildDuration,
+  podMessage,
+  podObjects,
+  waitingLabel,
+  waitingOn,
   worstStatus,
 } from "../src/status";
 import { UIResource } from "../src/types";
@@ -118,6 +127,75 @@ test("statusLabel distinguishes queued from pending", () => {
   assert.equal(statusLabel(res({ updateStatus: "pending" })), "pending");
 });
 
+test("statusLabel prefers queued over the old pod status", () => {
+  const r = res({
+    updateStatus: "pending",
+    queued: true,
+    k8sResourceInfo: { podStatus: "Running" },
+  });
+  assert.equal(statusLabel(r), "queued");
+});
+
+test("statusLabel shows the pod status of a pending resource that is not queued", () => {
+  const r = res({
+    updateStatus: "pending",
+    k8sResourceInfo: { podStatus: "CrashLoopBackOff" },
+  });
+  assert.equal(statusLabel(r), "CrashLoopBackOff");
+});
+
+test("statusLabel prefers the waiting reason over queued", () => {
+  const r = res({
+    updateStatus: "pending",
+    queued: true,
+    waiting: { reason: "waiting-for-dep", on: [{ kind: "UIResource", name: "db-migrate" }] },
+  });
+  assert.equal(statusLabel(r), "waiting on db-migrate");
+});
+
+test("resourceType prefers the deploy target over its image", () => {
+  const cases: [string, UIResource["status"], string | undefined][] = [
+    ["k8s beats image", { specs: [{ type: "image" }, { type: "k8s" }] }, "k8s"],
+    ["local", { specs: [{ type: "local" }] }, "local"],
+    ["compose", { specs: [{ type: "docker-compose" }, { type: "image" }] }, "docker-compose"],
+    ["image alone", { specs: [{ type: "image" }] }, "image"],
+    ["unspecified is not a type", { specs: [{ type: "unspecified" }] }, undefined],
+    ["no specs", {}, undefined],
+    ["missing status", undefined, undefined],
+  ];
+  for (const [name, status, want] of cases) {
+    assert.equal(resourceType(res(status)), want, name);
+  }
+});
+
+test("hasLiveUpdate is true when any target syncs", () => {
+  assert.equal(hasLiveUpdate(res({ specs: [{ type: "image", hasLiveUpdate: true }, { type: "k8s" }] })), true);
+  assert.equal(hasLiveUpdate(res({ specs: [{ type: "k8s" }] })), false);
+  assert.equal(hasLiveUpdate(res({})), false);
+});
+
+test("waitingOn lists the named refs only", () => {
+  const r = res({
+    waiting: { reason: "waiting-for-dep", on: [{ name: "a" }, { kind: "UIResource" }, { name: "b" }] },
+  });
+  assert.deepEqual(waitingOn(r), ["a", "b"]);
+  assert.deepEqual(waitingOn(res({})), []);
+});
+
+test("waitingLabel reads Tilt's hold reasons", () => {
+  const cases: [string, UIResource["status"], string | undefined][] = [
+    ["dep with a name", { waiting: { reason: "waiting-for-dep", on: [{ name: "db" }] } }, "waiting on db"],
+    ["two names", { waiting: { reason: "waiting-for-dep", on: [{ name: "a" }, { name: "b" }] } }, "waiting on a, b"],
+    ["reason with no names", { waiting: { reason: "waiting-for-cluster" } }, "waiting for cluster"],
+    ["unknown reason passes through", { waiting: { reason: "brand-new" } }, "brand-new"],
+    ["names with no reason", { waiting: { on: [{ name: "db" }] } }, undefined],
+    ["no waiting", {}, undefined],
+  ];
+  for (const [name, status, want] of cases) {
+    assert.equal(waitingLabel(res(status)), want, name);
+  }
+});
+
 test("compareResources sorts by order then name", () => {
   const sorted = [
     res({ order: 2 }, "beta"),
@@ -143,4 +221,82 @@ test("worstStatus picks the most urgent child", () => {
   for (const [name, statuses, want] of cases) {
     assert.equal(worstStatus(statuses.map((s) => res(s))), want, name);
   }
+});
+
+test("statusLabel shows a crash-looping pod rather than pending", () => {
+  const r = res({
+    updateStatus: "ok",
+    runtimeStatus: "pending",
+    k8sResourceInfo: { podStatus: "Error", podRestarts: 12 },
+  });
+  assert.equal(statusLabel(r), "Error · 12 restarts");
+});
+
+test("statusLabel omits a zero restart count", () => {
+  const r = res({ runtimeStatus: "ok", k8sResourceInfo: { podStatus: "Running" } });
+  assert.equal(statusLabel(r), "Running");
+});
+
+const NOW = Date.parse("2026-10-07T18:00:00Z");
+
+test("lastBuildDuration reads the most recent build", () => {
+  const r = res({
+    buildHistory: [
+      { startTime: "2026-10-07T17:22:53.420767Z", finishTime: "2026-10-07T17:22:53.464555Z" },
+      { startTime: "2026-10-07T17:00:00Z", finishTime: "2026-10-07T17:00:09Z" },
+    ],
+  });
+  assert.equal(lastBuildDuration(r), "44ms");
+});
+
+test("lastBuildDuration ignores an unfinished or inverted build", () => {
+  assert.equal(lastBuildDuration(res({ buildHistory: [{ startTime: "2026-10-07T17:00:00Z" }] })), undefined);
+  assert.equal(
+    lastBuildDuration(
+      res({ buildHistory: [{ startTime: "2026-10-07T17:00:09Z", finishTime: "2026-10-07T17:00:00Z" }] }),
+    ),
+    undefined,
+  );
+  assert.equal(lastBuildDuration(res({})), undefined);
+});
+
+test("buildSummary joins whichever halves Tilt reported", () => {
+  const both = res({
+    buildHistory: [{ startTime: "2026-10-07T17:22:53.420767Z", finishTime: "2026-10-07T17:22:53.464555Z" }],
+    lastDeployTime: "2026-10-07T17:20:00Z",
+  });
+  assert.equal(buildSummary(both, NOW), "44ms, 40m ago");
+  assert.equal(buildSummary(res({ lastDeployTime: "2026-10-07T17:20:00Z" }), NOW), "40m ago");
+  assert.equal(buildSummary(res({ lastDeployTime: "0001-01-01T00:00:00Z" }), NOW), undefined);
+  assert.equal(buildSummary(res({}), NOW), undefined);
+});
+
+test("conditionDetail only speaks when a condition is false", () => {
+  const r = res({
+    conditions: [
+      { type: "UpToDate", status: "True" },
+      { type: "Ready", status: "False", reason: "RuntimePending" },
+    ],
+  });
+  assert.equal(conditionDetail(r, "Ready"), "RuntimePending");
+  assert.equal(conditionDetail(r, "UpToDate"), undefined);
+  assert.equal(conditionDetail(res({}), "Ready"), undefined);
+});
+
+test("conditionDetail falls back to the message when there is no reason", () => {
+  const r = res({ conditions: [{ type: "Ready", status: "False", message: "pod never started" }] });
+  assert.equal(conditionDetail(r, "Ready"), "pod never started");
+});
+
+test("podMessage and podObjects read the kubernetes info", () => {
+  const r = res({
+    k8sResourceInfo: {
+      podStatusMessage: "back-off 5m0s restarting failed container=flaky",
+      displayNames: ["web:service", "web:deployment"],
+    },
+  });
+  assert.equal(podMessage(r), "back-off 5m0s restarting failed container=flaky");
+  assert.deepEqual(podObjects(r), ["web:service", "web:deployment"]);
+  assert.equal(podMessage(res({ k8sResourceInfo: { podStatusMessage: "" } })), undefined);
+  assert.deepEqual(podObjects(res({})), []);
 });

@@ -9,12 +9,12 @@ permissions:
   contents: read
 
 jobs:
-  check:
+  extension:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
           cache: npm
@@ -23,3 +23,52 @@ jobs:
       - run: npm run pretest && npm test
       - name: Package (exercises the release script's build path)
         run: node scripts/package.js build
+
+  language-server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: lsp/go.mod
+          cache-dependency-path: lsp/go.sum
+
+      - name: Build
+        run: make lsp
+
+      - name: Test
+        run: make lsp-test
+
+      - name: Vet
+        run: cd lsp && go vet ./...
+
+      - name: gofmt
+        run: |
+          unformatted=$(cd lsp && gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt needed on: $unformatted"
+            exit 1
+          fi
+
+      # A broken .goreleaser.yml would otherwise only surface when a tag is
+      # pushed, which is the worst moment to find out.
+      - name: Validate the release config
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
+        with:
+          version: "~> v2"
+          args: check
+
+      # The builtin table and the grammar's builtin lists are generated from
+      # the vendored stubs. Regenerating here catches a hand-edit of either.
+      - name: Generated files are in step with the vendored stubs
+        run: |
+          make lsp-gen
+          # Scoped to the generated paths, so an unrelated dirty file does not
+          # report a staleness that is not there.
+          generated="lsp/internal/builtins/builtins_gen.go resources/tiltfile.tmLanguage.json"
+          if ! git diff --quiet -- $generated; then
+            echo "::error::generated files are stale. Run 'make lsp-gen' and commit."
+            git --no-pager diff --stat -- $generated
+            exit 1
+          fi

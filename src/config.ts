@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { findToken } from "./token";
+import { findToken, isLoopbackHost } from "./token";
 
 export interface TiltConfig {
   host: string;
@@ -7,19 +7,34 @@ export interface TiltConfig {
   token: string;
   autoConnect: boolean;
   openInEditor: boolean;
+  /** True when the token came from disk rather than from settings. */
+  tokenFromFile: boolean;
 }
 
 export const CONNECTION_KEYS = ["tilt.host", "tilt.port", "tilt.token"];
 
 export function readConfig(): TiltConfig {
   const c = vscode.workspace.getConfiguration("tilt");
+  const configured = c.get<string>("token", "").trim();
   return {
     host: c.get<string>("host", "localhost"),
     port: c.get<number>("port", 10350),
-    token: c.get<string>("token", "").trim() || findToken(),
+    token: configured || findToken(),
     autoConnect: c.get<boolean>("autoConnect", true),
     openInEditor: c.get<boolean>("openInEditor", true),
+    tokenFromFile: !configured,
   };
+}
+
+/**
+ * The token to send, which is empty when the on-disk token would be leaving
+ * this machine. See isLoopbackHost.
+ */
+export function outboundToken(c: TiltConfig): string {
+  if (c.tokenFromFile && !isLoopbackHost(c.host)) {
+    return "";
+  }
+  return c.token;
 }
 
 export function baseUrl(c: TiltConfig): string {

@@ -2,3 +2,7 @@ node_modules/
 dist/
 out/
 *.vsix
+bin/
+lsp/bin/
+.corpus/
+dist-release/

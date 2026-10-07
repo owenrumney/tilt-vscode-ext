@@ -1,6 +1,7 @@
 .vscode/**
 .github/**
 src/**
+lsp/**
 test/**
 out/**
 node_modules/**
@@ -10,7 +11,15 @@ tsconfig*.json
 .gitignore
 **/*.map
 demo/**
+demo-k8s/**
 *.vsix
 scripts/**
 resources/tilt.gif
 resources/icon.svg
+.corpus/**
+dist-release/**
+
+# Only the bundle, never whatever else lands in dist/. A goreleaser run once
+# left its archives there and they were packaged into a 35 MB .vsix.
+dist/**
+!dist/extension.js

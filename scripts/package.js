@@ -3,6 +3,49 @@ const fs = require("fs");
 const path = require("path");
 
 const EXT_DIR = path.resolve(__dirname, "..");
+const BIN_DIR = path.join(EXT_DIR, "bin");
+
+// One .vsix per platform, each carrying one cross-compiled language server.
+// Shipping all five binaries in one artifact would quintuple every download.
+const TARGETS = [
+  { vsce: "darwin-arm64", goos: "darwin", goarch: "arm64" },
+  { vsce: "darwin-x64", goos: "darwin", goarch: "amd64" },
+  { vsce: "linux-arm64", goos: "linux", goarch: "arm64" },
+  { vsce: "linux-x64", goos: "linux", goarch: "amd64" },
+  { vsce: "win32-x64", goos: "windows", goarch: "amd64" },
+];
+
+function binaryName(goos) {
+  return goos === "windows" ? "tiltfile-lsp.exe" : "tiltfile-lsp";
+}
+
+// vsce preserves the file mode, and without the executable bit the extension
+// ships a language server it cannot start.
+function buildServer(target, serverVersion) {
+  fs.rmSync(BIN_DIR, { recursive: true, force: true });
+  fs.mkdirSync(BIN_DIR, { recursive: true });
+  const out = path.join(BIN_DIR, binaryName(target.goos));
+  // Stamped like the goreleaser build, so a bug report from the bundled
+  // server names a version rather than "dev".
+  execFileSync(
+    "go",
+    [
+      "build",
+      "-trimpath",
+      `-ldflags=-s -w -X main.version=${serverVersion}`,
+      "-o",
+      out,
+      "./cmd/tiltfile-lsp",
+    ],
+    {
+      cwd: path.join(EXT_DIR, "lsp"),
+      stdio: "inherit",
+      env: { ...process.env, GOOS: target.goos, GOARCH: target.goarch, CGO_ENABLED: "0" },
+    },
+  );
+  fs.chmodSync(out, 0o755);
+  return out;
+}
 const SEMVER = /^(\d+)\.(\d+)\.(\d+)$/;
 
 function parseSemver(tag) {
@@ -52,7 +95,14 @@ function isTransient(output) {
 }
 
 if (require.main !== module) {
-  module.exports = { parseSemver, compareSemverDesc, resolveReleaseTag, isTransient };
+  module.exports = {
+    parseSemver,
+    compareSemverDesc,
+    resolveReleaseTag,
+    isTransient,
+    TARGETS,
+    binaryName,
+  };
   return;
 }
 
@@ -72,7 +122,16 @@ if (!SEMVER.test(version)) {
   console.error(`Refusing to build: "${version}" is not a x.y.z version.`);
   process.exit(2);
 }
-const vsix = path.join(EXT_DIR, `${pkg.name}-${version}.vsix`);
+const vsixFor = (target) =>
+  path.join(EXT_DIR, `${pkg.name}-${version}-${target.vsce}.vsix`);
+
+// VSCE_TARGET builds one platform only, which is what a local install wants.
+const wanted = process.env.VSCE_TARGET;
+const targets = wanted ? TARGETS.filter((t) => t.vsce === wanted) : TARGETS;
+if (targets.length === 0) {
+  console.error(`Unknown VSCE_TARGET "${wanted}". One of: ${TARGETS.map((t) => t.vsce).join(", ")}`);
+  process.exit(2);
+}
 
 // Sync version from the release tag (v1.2.3 → 1.2.3) so package.json never drifts.
 if (mode !== "publish") {
@@ -84,20 +143,33 @@ if (mode !== "publish") {
     fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
   }
 
-  console.log(`\nPackaging ${path.basename(vsix)}...`);
-  execFileSync("npx", ["vsce", "package", "--no-dependencies", "--out", vsix], {
-    cwd: EXT_DIR,
-    stdio: "inherit",
-  });
+  for (const target of targets) {
+    const out = vsixFor(target);
+    console.log(`\nPackaging ${path.basename(out)} (${target.goos}/${target.goarch})...`);
+    buildServer(target, version);
+    execFileSync(
+      "npx",
+      ["vsce", "package", "--no-dependencies", "--target", target.vsce, "--out", out],
+      { cwd: EXT_DIR, stdio: "inherit" },
+    );
+  }
+  fs.rmSync(BIN_DIR, { recursive: true, force: true });
 }
 
 if (mode === "build") {
-  console.log(`\nDone: ${path.basename(vsix)}`);
+  for (const target of targets) {
+    const out = vsixFor(target);
+    const mb = (fs.statSync(out).size / 1024 / 1024).toFixed(1);
+    console.log(`  ${path.basename(out)} (${mb} MB)`);
+  }
   return;
 }
 
-if (!fs.existsSync(vsix)) {
-  console.error(`\n${path.basename(vsix)} is missing; run the build step first.`);
+const missing = targets.map(vsixFor).filter((p) => !fs.existsSync(p));
+if (missing.length > 0) {
+  console.error(
+    `\nMissing, so run the build step first:\n  ${missing.map((p) => path.basename(p)).join("\n  ")}`,
+  );
   process.exit(1);
 }
 
@@ -117,7 +189,7 @@ function elapsed(since) {
 }
 
 // Returns "ok", "retry" (stalled — worth another round) or "failed".
-function publishOnce(registry, argv, env) {
+function publishOnce(registry, label, argv, env) {
   const started = Date.now();
   try {
     process.stdout.write(
@@ -129,32 +201,27 @@ function publishOnce(registry, argv, env) {
         env: { ...process.env, ...env },
       }) || "",
     );
-    console.log(`  ${version} → ${registry} (${elapsed(started)})`);
+    console.log(`  ${label} → ${registry} (${elapsed(started)})`);
     return "ok";
   } catch (err) {
     const output = `${err.stdout || ""}${err.stderr || ""}${err.message || ""}`;
     process.stdout.write(output);
-    console.error(`  FAILED after ${elapsed(started)}: ${version} → ${registry}`);
+    console.error(`  FAILED after ${elapsed(started)}: ${label} → ${registry}`);
     return isTransient(output) ? "retry" : "failed";
   }
 }
 
-function publish(registry, tokenEnv, build) {
-  if (!process.env[tokenEnv]) {
-    console.log(`\nSkipping ${registry} publish (no ${tokenEnv}).`);
-    return;
-  }
-  const { argv, env } = build();
+function publishFile(registry, label, argv, env) {
   for (let round = 0; ; round++) {
-    console.log(
-      `\nPublishing to ${registry}...` + (round ? ` (round ${round + 1})` : ""),
-    );
-    const result = publishOnce(registry, argv, env);
+    if (round) {
+      console.log(`  retrying ${label} (round ${round + 1})`);
+    }
+    const result = publishOnce(registry, label, argv, env);
     if (result === "ok") {
       return;
     }
     if (result === "failed" || round >= ROUND_DELAYS_MS.length) {
-      failures.push(`${version} → ${registry}`);
+      failures.push(`${label} → ${registry}`);
       return;
     }
     const delay = ROUND_DELAYS_MS[round];
@@ -163,13 +230,28 @@ function publish(registry, tokenEnv, build) {
   }
 }
 
-publish(MARKETPLACE, "VSCODE_PUBLISH_TOKEN", () => ({
-  argv: ["vsce", "publish", "--skip-duplicate", "--packagePath", vsix],
+// One call per .vsix. A partial publish is recoverable because both
+// registries take --skip-duplicate, so a re-run is safe.
+function publish(registry, tokenEnv, build) {
+  if (!process.env[tokenEnv]) {
+    console.log(`\nSkipping ${registry} publish (no ${tokenEnv}).`);
+    return;
+  }
+  console.log(`\nPublishing to ${registry}...`);
+  for (const target of targets) {
+    const file = vsixFor(target);
+    const { argv, env } = build(file);
+    publishFile(registry, `${version} ${target.vsce}`, argv, env);
+  }
+}
+
+publish(MARKETPLACE, "VSCODE_PUBLISH_TOKEN", (file) => ({
+  argv: ["vsce", "publish", "--skip-duplicate", "--packagePath", file],
   env: { VSCE_PAT: process.env.VSCODE_PUBLISH_TOKEN },
 }));
 
-publish("Open VSX", "OPVSX_PUBLISH_TOKEN", () => ({
-  argv: ["ovsx", "publish", "--skip-duplicate", "--packagePath", vsix],
+publish("Open VSX", "OPVSX_PUBLISH_TOKEN", (file) => ({
+  argv: ["ovsx", "publish", "--skip-duplicate", "--packagePath", file],
   env: { OVSX_PAT: process.env.OPVSX_PUBLISH_TOKEN },
 }));
 

@@ -1,0 +1,22 @@
+# Exits non-zero after 15s, so the pod restart count climbs and the sidebar has
+# a CrashLoopBackOff to render.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flaky
+  labels: { app: flaky }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: flaky }
+  template:
+    metadata:
+      labels: { app: flaky }
+    spec:
+      containers:
+        - name: flaky
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - 'printf "\033[36mINFO \033[0m starting\n"; sleep 15; printf "\033[1;31mERROR\033[0m upstream gone\n"; exit 1'
