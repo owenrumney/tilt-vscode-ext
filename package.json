@@ -7,7 +7,7 @@
   "publisher": "owenrumney",
   "repository": {
     "type": "git",
-    "url": "https://github.com/owenrumney/tilt-viewer.git"
+    "url": "https://github.com/owenrumney/tilt-vscode-ext.git"
   },
   "engines": {
     "vscode": "^1.85.0"
@@ -47,6 +47,11 @@
           "type": "boolean",
           "default": true,
           "description": "Connect to Tilt when VS Code starts."
+        },
+        "tilt.openInEditor": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open the Tilt UI in a Simple Browser tab. Turn off to use the system browser."
         }
       }
     },
@@ -70,6 +75,17 @@
     "viewsWelcome": [
       {
         "view": "tilt.resources",
+        "when": "tilt.state == connecting",
+        "contents": "Connecting to Tilt..."
+      },
+      {
+        "view": "tilt.resources",
+        "when": "tilt.state == connected",
+        "contents": "Connected to Tilt, but it reports no resources.\n\nCheck your Tiltfile, or clear the status filter."
+      },
+      {
+        "view": "tilt.resources",
+        "when": "tilt.state != connecting && tilt.state != connected",
         "contents": "Not connected to Tilt.\n\nStart Tilt with `tilt up`, then connect.\n[Connect](command:tilt.connect)"
       }
     ],
@@ -106,41 +122,96 @@
         "command": "tilt.openInBrowser",
         "title": "Open in Tilt UI",
         "icon": "$(link-external)"
+      },
+      {
+        "command": "tilt.openEndpoint",
+        "title": "Open Endpoint",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "tilt.filterStatus",
+        "title": "Tilt: Filter by Status",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "tilt.clearStatusFilter",
+        "title": "Tilt: Clear Status Filter",
+        "icon": "$(filter-filled)"
+      },
+      {
+        "command": "tilt.expandAll",
+        "title": "Tilt: Expand All Groups",
+        "icon": "$(expand-all)"
+      },
+      {
+        "command": "tilt.collapseAll",
+        "title": "Tilt: Collapse All Groups",
+        "icon": "$(collapse-all)"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "tilt.reconnect",
+          "command": "tilt.filterStatus",
+          "when": "view == tilt.resources && !tilt.filtered",
+          "group": "navigation@0"
+        },
+        {
+          "command": "tilt.clearStatusFilter",
+          "when": "view == tilt.resources && tilt.filtered",
+          "group": "navigation@0"
+        },
+        {
+          "command": "tilt.expandAll",
           "when": "view == tilt.resources",
           "group": "navigation@1"
         },
         {
-          "command": "tilt.openInBrowser",
+          "command": "tilt.collapseAll",
           "when": "view == tilt.resources",
           "group": "navigation@2"
+        },
+        {
+          "command": "tilt.reconnect",
+          "when": "view == tilt.resources",
+          "group": "navigation@3"
+        },
+        {
+          "command": "tilt.openInBrowser",
+          "when": "view == tilt.resources",
+          "group": "navigation@4"
         }
       ],
       "view/item/context": [
         {
+          "command": "tilt.openEndpoint",
+          "when": "view == tilt.resources && viewItem == tiltResourceLinks",
+          "group": "inline@0"
+        },
+        {
           "command": "tilt.trigger",
-          "when": "view == tilt.resources && viewItem == tiltResource",
+          "when": "view == tilt.resources && viewItem =~ /^tiltResource/",
           "group": "inline@1"
         },
         {
           "command": "tilt.showLogs",
-          "when": "view == tilt.resources && viewItem == tiltResource",
+          "when": "view == tilt.resources && viewItem =~ /^tiltResource/",
           "group": "inline@2"
         },
         {
           "command": "tilt.trigger",
-          "when": "view == tilt.resources && viewItem == tiltResource",
+          "when": "view == tilt.resources && viewItem =~ /^tiltResource/",
           "group": "1_run@1"
         },
         {
           "command": "tilt.showLogs",
-          "when": "view == tilt.resources && viewItem == tiltResource",
+          "when": "view == tilt.resources && viewItem =~ /^tiltResource/",
           "group": "1_run@2"
+        },
+        {
+          "command": "tilt.openEndpoint",
+          "when": "view == tilt.resources && viewItem == tiltResourceLinks",
+          "group": "1_run@3"
         }
       ],
       "commandPalette": [
@@ -151,11 +222,16 @@
         {
           "command": "tilt.showLogs",
           "when": "false"
+        },
+        {
+          "command": "tilt.openEndpoint",
+          "when": "false"
         }
       ]
     }
   },
   "scripts": {
+    "vscode:prepublish": "npm run package",
     "compile": "node esbuild.js",
     "watch": "node esbuild.js --watch",
     "package": "node esbuild.js --production",
@@ -172,6 +248,7 @@
     "@types/ws": "^8.5.12",
     "@vscode/vsce": "^3.2.0",
     "esbuild": "^0.24.0",
+    "ovsx": "^0.10.1",
     "typescript": "^5.6.0"
   }
 }

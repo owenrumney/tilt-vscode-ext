@@ -9,3 +9,6 @@ Makefile
 tsconfig*.json
 .gitignore
 **/*.map
+demo/**
+*.vsix
+scripts/**
