@@ -1,0 +1,87 @@
+# A demo stack for screenshots and GIFs of the extension.
+#
+# Nothing here needs a cluster, a registry, or a private image: every resource
+# is a local command. It covers what the extension shows — label groups, every
+# status, endpoint links, manual triggers, and coloured log output.
+#
+#   cd demo && tilt up
+
+public = os.path.abspath('public')
+
+def site(name, port, label, urls):
+    """A served endpoint with a slow build, so the building state is visible."""
+    local_resource(
+        name,
+        cmd='printf "\\033[34m==>\\033[0m building %s\\n"; sleep 4; printf "\\033[32mok\\033[0m %s built\\n"' % (name, name),
+        serve_cmd='python3 -m http.server %d -b 127.0.0.1 --directory %s' % (port, public),
+        links=[link(url, title) for (url, title) in urls],
+        labels=[label],
+        allow_parallel=True,
+    )
+
+# 1-frontend — two served sites, each with a link button.
+site('web', 3010, '1-frontend', [('http://localhost:3010', 'web')])
+site('docs', 3011, '1-frontend', [('http://localhost:3011', 'docs')])
+
+# 2-services — the api carries two links, so the link button has to ask which.
+site('api', 3020, '2-services', [
+    ('http://localhost:3020', 'api'),
+    ('http://localhost:3020/health', 'health'),
+])
+
+# A log stream with colour, so the ANSI rendering has something to show.
+local_resource(
+    'worker',
+    cmd='printf "\\033[34m==>\\033[0m building worker\\n"; sleep 2',
+    serve_cmd='''
+    while true; do
+      printf "\\033[90m%s\\033[0m \\033[36mINFO \\033[0m queue depth 3\\n" "$(date +%T)"
+      sleep 2
+      printf "\\033[90m%s\\033[0m \\033[1;33mWARN \\033[0m retrying job 42\\n" "$(date +%T)"
+      sleep 2
+      printf "\\033[90m%s\\033[0m \\033[1;31mERROR\\033[0m job 42 failed: connection refused\\n" "$(date +%T)"
+      sleep 2
+      printf "\\033[38;5;208m  256-colour\\033[0m and \\033[38;2;86;156;214mtruecolour\\033[0m and \\033[4munderline\\033[0m\\n"
+      sleep 4
+    done
+    ''',
+    labels=['2-services'],
+    allow_parallel=True,
+)
+
+# 3-infra — a job that completes, one that waits on it, and one that fails red.
+local_resource(
+    'db-migrate',
+    cmd='printf "applying 3 migrations\\n"; sleep 3; printf "\\033[32mok\\033[0m schema at revision 0003\\n"',
+    labels=['3-infra'],
+)
+
+local_resource(
+    'seed-data',
+    cmd='printf "seeding\\n"; sleep 3; printf "\\033[32mok\\033[0m 1200 rows\\n"',
+    resource_deps=['db-migrate'],
+    labels=['3-infra'],
+)
+
+local_resource(
+    'broken',
+    cmd='printf "\\033[31merror\\033[0m: no such file: config/local.yaml\\n"; exit 1',
+    labels=['3-infra'],
+    allow_parallel=True,
+)
+
+# Manual trigger, for demoing the trigger button. auto_init keeps it idle
+# until the button is pressed.
+local_resource(
+    'nightly-report',
+    cmd='printf "building report\\n"; sleep 5; printf "\\033[32mok\\033[0m report written\\n"',
+    trigger_mode=TRIGGER_MODE_MANUAL,
+    auto_init=False,
+    labels=['3-infra'],
+)
+
+# No label, so it lands in the "unlabeled" group.
+local_resource(
+    'scratch',
+    cmd='printf "nothing to do\\n"',
+)

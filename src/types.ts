@@ -34,6 +34,7 @@ export interface UIResource {
   metadata?: {
     name?: string;
     deletionTimestamp?: string;
+    labels?: Record<string, string>;
   };
   status?: {
     runtimeStatus?: RuntimeStatus;

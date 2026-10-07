@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck and test
+        run: |
+          npm run typecheck
+          npm run pretest
+          npm test
+
+      - name: Build the vsix
+        run: node scripts/package.js build
+
+      - name: Restore git state after the vsix build
+        if: always()
+        run: git checkout -- package.json
+
+      # The registries cannot be un-published, so the release is created first.
+      - name: Attach the vsix to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "*.vsix"
+          generate_release_notes: true
+
+      - name: Publish to the registries
+        env:
+          VSCODE_PUBLISH_TOKEN: ${{ secrets.VSCODE_PUBLISH_TOKEN }}
+          OPVSX_PUBLISH_TOKEN: ${{ secrets.OPVSX_PUBLISH_TOKEN }}
+        run: node scripts/package.js publish

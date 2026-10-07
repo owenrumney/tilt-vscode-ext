@@ -8,12 +8,18 @@ const TOKEN_HEADER = "X-Tilt-Token";
 const BUILD_REASON_TRIGGER_WEB = 16;
 const BACKOFF_MS = [1000, 2000, 4000, 8000, 16000, 30000];
 const FETCH_TIMEOUT_MS = 5000;
+/** Tilt can die without closing the socket, so liveness is checked here. */
+const HEARTBEAT_MS = 15000;
+const MISSED_PONGS = 2;
 
 export type ConnectionState = "disconnected" | "connecting" | "connected";
 
 export class TiltClient implements vscode.Disposable {
   private socket?: WebSocket;
   private retry?: NodeJS.Timeout;
+  private heartbeat?: NodeJS.Timeout;
+  private alive = false;
+  private missed = 0;
   private attempt = 0;
   private stopped = true;
   private state: ConnectionState = "disconnected";
@@ -96,14 +102,22 @@ export class TiltClient implements vscode.Disposable {
     socket.on("open", () => {
       this.attempt = 0;
       this.setState("connected");
+      this.startHeartbeat(socket);
     });
-    socket.on("message", (data) => this.handleMessage(data.toString()));
+    socket.on("message", (data) => {
+      this.alive = true;
+      this.handleMessage(data.toString());
+    });
+    socket.on("pong", () => {
+      this.alive = true;
+    });
     socket.on("error", () => {
       // "close" always follows; retry is scheduled there.
     });
     socket.on("close", () => {
       if (this.socket === socket) {
         this.socket = undefined;
+        this.stopHeartbeat();
         this.scheduleRetry();
       }
     });
@@ -154,6 +168,31 @@ export class TiltClient implements vscode.Disposable {
     }, delay);
   }
 
+  private startHeartbeat(socket: WebSocket): void {
+    this.stopHeartbeat();
+    this.alive = true;
+    this.missed = 0;
+    this.heartbeat = setInterval(() => {
+      if (this.alive) {
+        this.missed = 0;
+      } else if (++this.missed >= MISSED_PONGS) {
+        // A long synchronous parse can delay one pong, so only a run of
+        // missed ticks means the connection is dead but open.
+        socket.terminate();
+        return;
+      }
+      this.alive = false;
+      socket.ping();
+    }, HEARTBEAT_MS);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeat) {
+      clearInterval(this.heartbeat);
+      this.heartbeat = undefined;
+    }
+  }
+
   private clearRetry(): void {
     if (this.retry) {
       clearTimeout(this.retry);
@@ -164,6 +203,7 @@ export class TiltClient implements vscode.Disposable {
   private closeSocket(): void {
     const socket = this.socket;
     this.socket = undefined;
+    this.stopHeartbeat();
     socket?.removeAllListeners();
     socket?.close();
   }

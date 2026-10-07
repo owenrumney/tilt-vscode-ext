@@ -6,6 +6,9 @@
   },
   "include": [
     "test",
+    "src/ansi.ts",
+    "src/group.ts",
+    "src/logstore.ts",
     "src/model.ts",
     "src/status.ts",
     "src/token.ts",

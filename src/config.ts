@@ -6,6 +6,7 @@ export interface TiltConfig {
   port: number;
   token: string;
   autoConnect: boolean;
+  openInEditor: boolean;
 }
 
 export const CONNECTION_KEYS = ["tilt.host", "tilt.port", "tilt.token"];
@@ -17,6 +18,7 @@ export function readConfig(): TiltConfig {
     port: c.get<number>("port", 10350),
     token: c.get<string>("token", "").trim() || findToken(),
     autoConnect: c.get<boolean>("autoConnect", true),
+    openInEditor: c.get<boolean>("openInEditor", true),
   };
 }
 
