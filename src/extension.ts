@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { TiltClient } from "./client";
 import { CONNECTION_KEYS, TiltConfig, baseUrl, readConfig } from "./config";
-import { findTiltfiles, tiltDown, tiltUp } from "./cli";
+import { findTiltfiles, tiltDown, tiltStop, tiltUp } from "./cli";
 import { warnOnConflicts } from "./conflict";
 import { LogStore, TILT_KEY } from "./logstore";
 import { startLanguageServer } from "./lsp";
@@ -131,7 +131,9 @@ export function activate(context: vscode.ExtensionContext): void {
     );
   };
 
-  const log = vscode.window.createOutputChannel("Tiltfile Language Server", {
+  // One channel for everything the extension does, so "which command ran and
+  // what did it do" is answerable after the fact.
+  const log = vscode.window.createOutputChannel("Tilt Tools", {
     log: true,
   });
   const languageClient = startLanguageServer(context, log);
@@ -162,8 +164,9 @@ export function activate(context: vscode.ExtensionContext): void {
     tiltfileWatcher,
     ...(languageClient ? [{ dispose: () => void languageClient.stop() }] : []),
     vscode.workspace.onDidChangeWorkspaceFolders(refreshTiltfiles),
-    vscode.commands.registerCommand("tilt.up", () => tiltUp(readConfig())),
-    vscode.commands.registerCommand("tilt.down", () => tiltDown(readConfig())),
+    vscode.commands.registerCommand("tilt.up", () => tiltUp(readConfig(), context, log)),
+    vscode.commands.registerCommand("tilt.down", () => tiltDown(readConfig(), context, log)),
+    vscode.commands.registerCommand("tilt.stop", () => tiltStop(readConfig(), log)),
     vscode.commands.registerCommand("tilt.filterStatus", applyStatusFilter),
     vscode.commands.registerCommand("tilt.clearStatusFilter", () => {
       tree.setStatusFilter([]);

@@ -66,6 +66,13 @@ function resolveReleaseTag(gitTags) {
   if (/^v/.test(refTag || "") && parseSemver(refTag)) {
     return refTag;
   }
+  // Only a release build takes its version from a tag. Locally, package.json
+  // wins: a tag on HEAD would otherwise stamp every test build with the
+  // version already on the marketplace, so VS Code sees no upgrade and can
+  // replace the build under test with the published one.
+  if (!process.env.CI && gitTags === undefined) {
+    return null;
+  }
   try {
     const out =
       gitTags ??

@@ -2,7 +2,7 @@
   "name": "tilt-tools",
   "displayName": "Tilt Tools",
   "description": "Tiltfile language support, resource tree, logs and tilt up/down from VS Code",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "license": "Apache-2.0",
   "publisher": "owenrumney",
   "repository": {
@@ -136,6 +136,11 @@
         "view": "tilt.resources",
         "when": "tilt.state == connected",
         "contents": "Connected to Tilt, but it reports no resources.\n\nCheck your Tiltfile, or clear the status filter."
+      },
+      {
+        "view": "tilt.resources",
+        "when": "tilt.state != connecting && tilt.state != connected && tilt.hasTiltfile",
+        "contents": "Not connected to Tilt.\n\nAlready running it elsewhere?\n[Connect](command:tilt.connect)"
       },
       {
         "view": "tilt.resources",
