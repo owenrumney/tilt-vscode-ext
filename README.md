@@ -96,9 +96,16 @@ Tag the commit and push the tag:
 git tag v0.1.1 && git push origin v0.1.1
 ```
 
-`.github/workflows/release.yml` then runs `scripts/package.js`, which syncs
-`package.json` to the tag, builds the `.vsix`, publishes it to the VS Code
-Marketplace and Open VSX, and attaches it to the GitHub release.
+`.github/workflows/release.yml` then runs `scripts/package.js` twice:
+
+1. `build` — stamps the tag version into the packaged `package.json` and writes
+   the `.vsix`. The commit on `main` keeps whatever version it had; only the
+   artifact is stamped.
+2. `publish` — pushes that same `.vsix` to the VS Code Marketplace and Open VSX.
+
+The GitHub release is created between the two. Neither registry supports
+un-publishing, so a failed publish leaves a release to retry against, rather
+than a published version with nothing behind it.
 
 Both publishes are skipped when their token is missing, so a fork releases
 nothing by accident. Repository secrets:
