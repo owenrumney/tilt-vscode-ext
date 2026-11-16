@@ -6,7 +6,7 @@
 package builtins
 
 // TiltVersion is the Tilt release the table describes.
-const TiltVersion = "v0.37.8"
+const TiltVersion = "v0.37.9"
 
 // Symbols is keyed by qualified name: "local_resource", "os.path.abspath".
 var Symbols = map[string]Symbol{
